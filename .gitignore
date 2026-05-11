@@ -1,0 +1,11 @@
+node_modules
+.next
+out
+dist
+.env*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+data/launches.json
+data/votes.json
+data/agent-chats/
