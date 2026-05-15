@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum LaunchCategory {
+  agent
+  sdk
+  infra
+  template
+  tooling
+}
+
+model Launch {
+  id          String         @id
+  title       String
+  tagline     String
+  url         String
+  description String
+  category    LaunchCategory
+  builder     String
+  voteCount   Int            @default(0)
+  createdAt   DateTime       @default(now())
+
+  votes Vote[]
+
+  @@index([voteCount])
+  @@index([createdAt])
+}
+
+model Vote {
+  id        String   @id @default(uuid())
+  launchId  String
+  voterId   String
+  createdAt DateTime @default(now())
+
+  launch Launch @relation(fields: [launchId], references: [id], onDelete: Cascade)
+
+  @@unique([launchId, voterId])
+  @@index([voterId])
+}
+
+model AgentSession {
+  voterId   String   @id
+  messages  Json
+  updatedAt DateTime @updatedAt
+}
+
+/// Per-actor sliding window buckets (minute or hour slots) for abuse resistance.
+model RateBucket {
+  id         String @id @default(uuid())
+  scope      String
+  actorId    String
+  windowSlot Int
+  count      Int    @default(0)
+
+  @@unique([scope, actorId, windowSlot])
+  @@index([scope, actorId])
+}

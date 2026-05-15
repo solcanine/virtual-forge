@@ -16,5 +16,3 @@ export type Launch = {
   voteCount: number;
   createdAt: string;
 };
-
-export type VoteRecord = Record<string, string[]>;

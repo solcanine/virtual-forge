@@ -7,130 +7,132 @@ The app lets builders submit launches, browse a ranked feed, upvote projects, an
 [![Telegram](https://img.shields.io/badge/Telegram-@solcanine-2CA5E0?style=for-the-badge&logo=telegram)](https://t.me/solcanine)
 [![Twitter](https://img.shields.io/badge/Twitter-@solcanine-1DA1F2?style=for-the-badge&logo=x)](https://x.com/intent/follow?screen_name=solcanine)
 
-## Project Name
+## Project name
 
-- App name: `Virtual Forge`
-- Built-in agent name: `Forge Butler`
+- App: **Virtual Forge**
+- Agent: **Forge Butler**
+- npm package name: `virtual-forge` (see `package.json`)
 
-If you want a short one-line description:
+## What ships today (product-shaped MVP)
 
-> A launch board and agent assistant for projects built around the Virtuals ecosystem.
+- **SQLite + Prisma** for launches, votes, agent sessions, and rate-limit buckets (no fragile JSON files).
+- **Unique `(launchId, voterId)` votes** enforced in the database with atomic increments (race-safe vs hand-edited JSON).
+- **Rate limits** (per anonymous browser cookie): votes/minute, submits/hour, agent messages/minute.
+- **URL hardening**: only `http:` / `https:` URLs accepted for launches (blocks `javascript:` and similar).
+- **`GET /api/health`** — returns JSON and verifies the DB responds (`SELECT 1`).
+- **Dockerfile** — builds the app and runs `prisma migrate deploy` before `npm run start`.
+- Optional **OpenAI** tool planner via `OPENAI_API_KEY` (still works offline without it).
 
-## What This MVP Does
+## Main routes
 
-- Shows a ranked home feed of launches
-- Supports project submission with validation
-- Allows one upvote per visitor per launch
-- Stores launch and vote data locally in JSON files
-- Includes an agent chat page that can:
-  - answer questions about the board
-  - search launches
-  - explain a simple Virtuals-style builder playbook
-- Supports an optional OpenAI-powered planner when `OPENAI_API_KEY` is set
+| Path | Purpose |
+|------|---------|
+| `/` | Leaderboard |
+| `/submit` | Submit a launch |
+| `/launch/[id]` | Detail page |
+| `/agent` | Forge Butler chat |
+| `/api/health` | Liveness / DB check |
 
-## Main Pages
-
-- `/` - launch leaderboard
-- `/submit` - submit a new launch
-- `/launch/[id]` - launch detail page
-- `/agent` - Forge Butler chat agent
-
-## Product Logic
+## Product logic
 
 ### Launch board
 
-- Builders submit a project with title, tagline, URL, category, builder name, and description.
-- The feed is sorted by:
-  1. vote count descending
-  2. newest first as the tiebreaker
-- Each visitor gets an anonymous cookie-based ID.
-- A visitor can upvote the same launch only once.
+- Submit title, tagline, URL, category, builder, description (validated server-side).
+- Feed order: **votes descending**, then **newest first**.
+- Anonymous **`vf_voter` cookie** identifies a visitor for votes and agent sessions.
+- **One vote per visitor per launch** at the DB layer (`Vote` uniqueness).
 
-### Agent
+### Forge Butler
 
-Forge Butler follows a simple loop:
+Perceive → plan → act (tools) → synthesize.
 
-1. Perceive the latest user message
-2. Plan how to answer
-3. Act by calling internal tools
-4. Synthesize a final reply
+- **Offline**: heuristic routing + tools reading the DB.
+- **With API key**: OpenAI tool calling over the same tools.
 
-In offline mode, the agent uses deterministic routing.
+### Rate limits (defaults)
 
-If `OPENAI_API_KEY` is set, the agent can use an LLM planner with tool calling.
+Rough caps per cookie identity:
 
-## Virtual Protocol Positioning
+| Action | Window | Limit |
+|--------|--------|-------|
+| Upvote | 1 minute | 40 |
+| Submit launch | 1 hour | 12 |
+| Agent message | 1 minute | 24 |
 
-This repo is **inspired by** the Virtuals ecosystem and is useful as a builder-facing MVP, but it does **not** yet run real ACP job execution on-chain.
+Tune these in `app/actions.ts` and `app/actions/agentActions.ts`.
 
-Right now, the app provides:
+## Virtual Protocol note
 
-- a launch board for Virtuals-related projects
-- an agent UI and tool loop
-- a clean place to add a real ACP worker later
+This repo is **Virtuals-themed** and structured so you can grow toward **ACP**, but **on-chain agent commerce is not wired here**. Keys and sellers belong in a **long-lived Node worker** (`@virtuals-protocol/acp-node`), not inside anonymous browser sessions — see comments in `lib/agent/orchestrator.ts`.
 
-The intended next step for production-grade Virtual Protocol usage is:
+## Tech stack
 
-- keep the Next.js app as the UI
-- move ACP signing and wallet-based execution into a dedicated Node worker
-- connect the web app to that worker through a queue or job table
+- Next.js 15, React 19, TypeScript, Tailwind CSS
+- Prisma ORM + SQLite (default)
 
-## Tech Stack
+## Prerequisites
 
-- Next.js 15
-- React 19
-- TypeScript
-- Tailwind CSS
+- Node.js 20+
+- npm
 
-## Local Data
-
-Local runtime data is written to `data/`:
-
-- `data/launches.json`
-- `data/votes.json`
-- `data/agent-chats/`
-
-These files are gitignored so the repo stays clean.
-
-## Getting Started
+## Getting started
 
 ```bash
+cp .env.example .env
+# Ensure DATABASE_URL points at a writable SQLite path, e.g. file:./data/dev.db
+
 npm install
+npx prisma migrate dev    # applies migrations + runs seed on empty DB
 npm run dev
 ```
 
-Open:
+Open `http://localhost:3000`.
 
-- `http://localhost:3000`
+### Useful scripts
 
-## Environment Variables
+| Script | Purpose |
+|--------|---------|
+| `npm run db:migrate` | Create/apply migrations (dev) |
+| `npm run db:deploy` | Apply migrations only (production / CI) |
+| `npm run db:seed` | Seed demo launches if you cleared the DB |
+| `npm run db:studio` | Prisma Studio |
 
-Copy from `.env.example` if needed.
+## Environment variables
+
+See `.env.example`.
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `DATABASE_URL` | **Yes** | e.g. `file:./data/dev.db` for SQLite |
+| `OPENAI_API_KEY` | No | Enables LLM planner for Forge Butler |
+| `OPENAI_MODEL` | No | Defaults to `gpt-4o-mini` |
+
+## Production checklist
+
+1. Set **`DATABASE_URL`** on the host (SQLite on a **persistent volume**, or switch Prisma `provider` to `postgresql` and use Neon / RDS).
+2. Run **`npx prisma migrate deploy`** before or on container start (see `Dockerfile` `CMD`).
+3. Accept that **cookie identity is not Sybil-resistant** — add **wallet login** or **CAPTCHA** when you need real governance.
+4. Add **moderation**, **spam reporting**, and **backups** before a public launch.
+5. Wire a **separate ACP worker** when you are ready for real Virtual Protocol commerce.
+
+## Docker
 
 ```bash
-OPENAI_API_KEY=
-OPENAI_MODEL=gpt-4o-mini
+docker build -t virtual-forge .
+docker run --rm -p 3000:3000 \
+  -e DATABASE_URL=file:/app/data/prod.db \
+  -v forge-data:/app/data \
+  virtual-forge
 ```
 
-- Without `OPENAI_API_KEY`, the agent still works in offline heuristic mode.
-- With `OPENAI_API_KEY`, the agent can use model-based planning and tool calling.
-
-## Suggested Pitch
-
-You can describe this project like this:
+## Pitch
 
 > Virtual Forge is a launch board and agent assistant for builders shipping in the Virtuals ecosystem.
 
-Or more casually:
+## Next upgrades
 
-> It is a Product Hunt-style frontend for Virtuals-related projects, plus a small builder agent.
-
-## Next Steps
-
-Good next upgrades:
-
-- real authentication or wallet-based identity
-- project logos and screenshots
-- comments and discussions
-- daily or weekly leaderboards
-- real ACP worker integration using the Virtuals Node SDK
+- Wallet or OAuth identity
+- Postgres as default in production
+- Media (logos, screenshots)
+- Comments / daily windows
+- Dedicated ACP seller worker + queue from this UI
