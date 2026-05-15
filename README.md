@@ -4,6 +4,9 @@ Virtual Forge is a Product Hunt-style launch board for the Virtuals / Virtual Pr
 
 The app lets builders submit launches, browse a ranked feed, upvote projects, and chat with a lightweight agent called **Forge Butler**.
 
+[![Telegram](https://img.shields.io/badge/Telegram-@solcanine-2CA5E0?style=for-the-badge&logo=telegram)](https://t.me/solcanine)
+[![Twitter](https://img.shields.io/badge/Twitter-@solcanine-1DA1F2?style=for-the-badge&logo=x)](https://x.com/intent/follow?screen_name=solcanine)
+
 ## Project Name
 
 - App name: `Virtual Forge`
